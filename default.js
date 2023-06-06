@@ -20,7 +20,7 @@ var WebSocket = require('ws');
 var http_port = process.env.HTTP_PORT || 3001;
 var p2p_port = process.env.P2P_PORT || 6001;
 var initialPeers = process.env.PEERS ? process.env.PEERS.split(',') : [];
-var difficulty = 6;
+var difficulty = 4;
 
 var sockets = [];
 var MessageType = {
@@ -29,7 +29,6 @@ var MessageType = {
   RESPONSE_BLOCKCHAIN: 2,
 };
 
-// Инициализация Блокчейна
 var getGenesisBlock = () => {
   return new Block(
     0,
@@ -44,7 +43,6 @@ var getGenesisBlock = () => {
 
 var blockchain = [getGenesisBlock()];
 
-// Инициализация HTTP-сервера 
 var initHttpServer = () => {
   var app = express();
   app.use(bodyParser.json());
@@ -71,21 +69,6 @@ var initHttpServer = () => {
   app.listen(http_port, () => console.log('Listening http on port: ' + http_port));
 }
 
-var isMiningConditionMet = (hash) => {
-    const firstSixCharacters = hash.substring(0, 6);
-    let sum = 0;
-  
-    // Вычисляем сумму ASCII кодов символов первых шести символов
-    for (let i = 0; i < firstSixCharacters.length; i++) {
-      sum += firstSixCharacters.charCodeAt(i);
-    }
-  
-    // Проверяем, является ли сумма кратной 10
-    return sum % 10 === 0;
-  }
-
-
-// Майнинг нового блока
 var mineBlock = (blockData) => {
   var previousBlock = getLatestBlock();
   var nextIndex = previousBlock.index + 1;
@@ -93,7 +76,7 @@ var mineBlock = (blockData) => {
   var nextTimestamp = new Date().getTime() / 1000;
   var nextHash = calculateHash(nextIndex, previousBlock.hash, nextTimestamp, blockData, nonce);
 
-  while (!isMiningConditionMet(nextHash.substring(0, difficulty))) {
+  while (nextHash.substring(0, difficulty) !== Array(difficulty + 1).join("0")) {
     nonce++;
     nextTimestamp = new Date().getTime() / 1000;
     nextHash = calculateHash(nextIndex, previousBlock.hash, nextTimestamp, blockData, nonce);
@@ -121,14 +104,12 @@ var mineBlock = (blockData) => {
   return new Block(nextIndex, previousBlock.hash, nextTimestamp, blockData, nextHash, difficulty, nonce);
 }
 
-// Инициализация P2P-сервера
 var initP2PServer = () => {
   var server = new WebSocket.Server({ port: p2p_port });
   server.on('connection', (ws) => initConnection(ws));
   console.log('Listening websocket p2p port on: ' + p2p_port);
 }
 
-// Инициализация нового соединения
 var initConnection = (ws) => {
   sockets.push(ws);
   initMessageHandler(ws);
@@ -136,7 +117,6 @@ var initConnection = (ws) => {
   write(ws, queryChainLengthMsg());
 }
 
-// Обработка полученных сообщений
 var initMessageHandler = (ws) => {
   ws.on('message', (data) => {
     var message = JSON.parse(data);
@@ -155,7 +135,6 @@ var initMessageHandler = (ws) => {
   });
 }
 
-// Обработка ошибок соединения
 var initErrorHandler = (ws) => {
   function closeConnection(ws) {
     console.log('Connection failed to peer: ' + ws.url);
@@ -166,7 +145,6 @@ var initErrorHandler = (ws) => {
   ws.on('error', () => closeConnection(ws));
 }
 
-// Подключение к новым пирам
 var connectToPeers = (newPeers) => {
   newPeers.forEach((peer) => {
     var ws = new WebSocket(peer);
@@ -177,7 +155,6 @@ var connectToPeers = (newPeers) => {
   });
 }
 
-// Обработка блокчейн-ответов от пиров
 var handleBlockchainResponse = (message) => {
   var receivedBlocks = JSON.parse(message.data).sort((b1, b2) => b1.index - b2.index);
   var latestBlockReceived = receivedBlocks[receivedBlocks.length - 1];
@@ -207,7 +184,6 @@ var handleBlockchainResponse = (message) => {
   }
 }
 
-// Создание следуюшего блока
 var generateNextBlock = (blockData) => {
   var previousBlock = getLatestBlock();
   var nextIndex = previousBlock.index + 1;
@@ -217,24 +193,20 @@ var generateNextBlock = (blockData) => {
   return new Block(nextIndex, previousBlock.hash, nextTimestamp, blockData, nextHash);
 }
 
-// Вычисление хэша для блока
 var calculateHashForBlock = (block) => {
   return calculateHash(block.index, block.previousHash, block.timestamp, block.data, block.nonce);
 }
 
-// Вычисление хэша для блока (CryptoJS)
 var calculateHash = (index, previousHash, timestamp, data, nonce) => {
   return CryptoJS.SHA256(index + previousHash + timestamp + data, nonce).toString();
 }
 
-// Добавление нового блока в блокчейн 
 var addBlock = (newBlock) => {
   if (isValidNewBlock(newBlock, getLatestBlock())) {
     blockchain.push(newBlock);
   }
 }
 
-// Проверка нового блока
 var isValidNewBlock = (newBlock, previousBlock) => {
   if (previousBlock.index + 1 !== newBlock.index) {
     console.log('Invalid index');
@@ -257,7 +229,6 @@ var isValidNewBlock = (newBlock, previousBlock) => {
   return true;
 }
 
-// Замещение старого блокчейна новым
 var replaceChain = (newBlocks) => {
   if (isValidChain(newBlocks) && newBlocks.length > blockchain.length) {
     console.log('Received blockchain is valid. Replacing current blockchain with received blockchain');
@@ -268,7 +239,6 @@ var replaceChain = (newBlocks) => {
   }
 }
 
-// Проверка цепи
 var isValidChain = (blockchainToValidate) => {
   if (JSON.stringify(blockchainToValidate[0]) !== JSON.stringify(getGenesisBlock())) {
     return false;
@@ -284,22 +254,18 @@ var isValidChain = (blockchainToValidate) => {
   return true;
 }
 
-// Получение последнего блока в цепи
 var getLatestBlock = () => {
   return blockchain[blockchain.length - 1];
 }
 
-// Создание сообщения запроса для последнего блока
 var queryChainLengthMsg = () => {
   return { type: MessageType.QUERY_LATEST };
 }
 
-// Создание сообщения запроса для всего блокчейна
 var queryAllMsg = () => {
   return { type: MessageType.QUERY_ALL };
 }
 
-// Создание ответного сообщения для блокчейна
 var responseChainMsg = () => {
   return {
     type: MessageType.RESPONSE_BLOCKCHAIN,
@@ -307,7 +273,6 @@ var responseChainMsg = () => {
   };
 }
 
-// Создание ответного сообщения для последнего блока в цепи 
 var responseLatestMsg = () => {
   return {
     type: MessageType.RESPONSE_BLOCKCHAIN,
@@ -315,19 +280,15 @@ var responseLatestMsg = () => {
   };
 }
 
-// Отправка сообщения в WebSocket
 var write = (ws, message) => {
   ws.send(JSON.stringify(message));
 }
 
-// Рассылка сообщения всем пирам
 var broadcast = (message) => {
   sockets.forEach((socket) => write(socket, message));
 }
 
-// Подключение к начальным пирам
 connectToPeers(initialPeers);
 
-// Инициализация HTTP-сервера, P2P-сервера
 initHttpServer();
 initP2PServer();
