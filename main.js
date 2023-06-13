@@ -15,12 +15,12 @@ class Block {
 var CryptoJS = require('crypto-js');
 var express = require('express');
 var bodyParser = require('body-parser');
-var WebSocket = require('ws');
+var WebSocket = require('ws');  
 
 var http_port = process.env.HTTP_PORT || 3001;
 var p2p_port = process.env.P2P_PORT || 6001;
 var initialPeers = process.env.PEERS ? process.env.PEERS.split(',') : [];
-var difficulty = 6;
+var difficulty = 3;
 
 var sockets = [];
 var MessageType = {
@@ -71,18 +71,36 @@ var initHttpServer = () => {
   app.listen(http_port, () => console.log('Listening http on port: ' + http_port));
 }
 
-var isMiningConditionMet = (hash) => {
-    const firstSixCharacters = hash.substring(0, 6);
-    let sum = 0;
+var isFibonacci = (num) => {
+  if (num === 0) return true;
+  var a = 0;
+  var b = 1;
+  var c = a + b;
   
-    // Вычисляем сумму ASCII кодов символов первых шести символов
-    for (let i = 0; i < firstSixCharacters.length; i++) {
-      sum += firstSixCharacters.charCodeAt(i);
-    }
-  
-    // Проверяем, является ли сумма кратной 10
-    return sum % 10 === 0;
+  while (c <= num) {
+    if (c === num) return true;
+    a = b;
+    b = c;
+    c = a + b;
   }
+  
+  return false;
+};
+
+var isMiningConditionMet = (hash) => {
+
+  var firstCharacters = hash.substring(0, difficulty);
+  var lastCharacters = hash.substring(hash.length - difficulty);
+
+  var firstDecimalHash = parseInt(firstCharacters, 16);
+  var lastDecimalHash = parseInt(lastCharacters, 16);
+  
+  if (isFibonacci(firstDecimalHash) === true && isFibonacci(lastDecimalHash) === true && firstDecimalHash === lastDecimalHash) {
+    return true;
+  }
+
+  return false;
+};
 
 
 // Майнинг нового блока
@@ -93,7 +111,7 @@ var mineBlock = (blockData) => {
   var nextTimestamp = new Date().getTime() / 1000;
   var nextHash = calculateHash(nextIndex, previousBlock.hash, nextTimestamp, blockData, nonce);
 
-  while (!isMiningConditionMet(nextHash.substring(0, difficulty))) {
+  while (isMiningConditionMet(nextHash) !== true) {
     nonce++;
     nextTimestamp = new Date().getTime() / 1000;
     nextHash = calculateHash(nextIndex, previousBlock.hash, nextTimestamp, blockData, nonce);
